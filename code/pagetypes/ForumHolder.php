@@ -496,8 +496,8 @@ class ForumHolder extends Page {
 	 * @TODO unit test to ensure the correct email is returned.
 	 */
 	public function getForumEmailAddress(){
-		if($this->obj(ForumEmailAddress)){
-			return $this->obj(ForumEmailAddress);
+		if($this->getField('ForumEmailAddress')){
+			return $this->getField('ForumEmailAddress');
 		} else {
 			return Config::inst()->get('Email', 'admin_email');
 		}
