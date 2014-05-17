@@ -7,14 +7,14 @@
  * @package forum
  */
 
-class Forum_Subscription extends DataObject {
+class ForumSubscription extends DataObject {
 	
 	private static $db = array(
 		"LastSent" => "SS_Datetime"
 	);
 
 	private static $has_one = array(
-		"Forum" => "ForumSubscripton",
+		"Forum" => "Forum",
 		"Member" => "Member"
 	);
 	
@@ -22,24 +22,37 @@ class Forum_Subscription extends DataObject {
 	/**
 	 * Checks to see if a Member is already subscribed to this forum
 	 *
-	 * @param int $forumID The ID of the thread to check
-	 * @param int $memberID The ID of the currently logged in member (Defaults to Member::currentUserID())
+	 * @param int $ForumID The ID of the thread to check
+	 * @param int $MemberID The ID of the currently logged in member (Defaults to Member::currentUserID())
 	 *
 	 * @return bool true if they are subscribed, false if they're not
+	 * @TODO unit test for this to check if a given known member subscription status can be determined using this method. is/isn't subscribed.
+	 * @TODO move this to the Forum class and refactor?
 	 */
 	static function already_subscribed($forumID, $memberID = null) {
 		if(!$memberID) $memberID = Member::currentUserID();
+
+		// @TODO we may not need this as ORM escapes SQL inputs for us. But will need to check.
 		$SQL_forumID = Convert::raw2sql($forumID);
 		$SQL_memberID = Convert::raw2sql($memberID);
-
+		//@TODO may not need with check as ORM will simply return a false if when using these no objects are returned.
 		if($SQL_forumID=='' || $SQL_memberID=='')
 			return false;
-		
-		return (DB::query("
-			SELECT COUNT(\"ID\") 
-			FROM \"Forum_Subscription\" 
-			WHERE \"ForumID\" = '$SQL_forumID' AND \"MemberID\" = $SQL_memberID"
-		)->value() > 0) ? true : false;
+
+		$checkSubscribed = ForumSubscription::get()
+			->filter(array(
+				'ForumID' => $SQL_forumID,
+				'MemberID' => $SQL_memberID
+			))
+			->count();
+
+		if($checkSubscribed > 0){
+			//subscribed to this forum
+			return true;
+		} else {
+			//not subscribed to this forum
+			return false;
+		}
 	}
 	
 	/**
@@ -47,26 +60,29 @@ class Forum_Subscription extends DataObject {
 	 * To get emailed, people subscribed to this Forum must have visited the forum 
 	 * since the last time they received an email
 	 *
+	 * @TODO Move to Forum and refactor? TO be discussed and explored.
 	 * @param Post $post The post that has just been added
 	 */
 	static function notify(Post $post) {		
 		// Use email address specified in the CMS
 		// This might not work when there's multiple forums as i'm not specifying the ID of the forum
 		// Yet to test
-		$emailAddress = DataObject::get_one("ForumHolder")->ForumEmailAddress;
-		
-		$list = DataObject::get(
-			"Forum_Subscription",
-			"\"ForumID\" = '". $post->ForumID ."' AND \"MemberID\" != '$post->AuthorID'"
-		);
+		//@TODO moving this method to Forum class would mean you could use on multiple ForumHolders by referencing the parent.
+		$emailAddress = ForumHolder::get()->first()->ForumEmailAddress;
+		//email each subscribed Member except the author
+		$list = ForumSubscription::get()
+			->filter(array(
+				'ForumID'=> $post->ForumID,
+				'MemberID:not' => $post->AuthorID
+			));
 			
 		if($list) {
 			foreach($list as $obj) {
+				//@TODO may not need to escape if we now use the ORM which does this for us, something to check?
 				$SQL_id = Convert::raw2sql((int)$obj->MemberID);
-
 				// Get the members details
-				$member = DataObject::get_one("Member", "\"Member\".\"ID\" = '$SQL_id'");
-				
+				$member = Member::get()->filter(array('ID' => $SQL_id))->first();
+
 				if($member) {
 					$email = new Email();
 					$email->setFrom($emailAddress);
@@ -76,7 +92,7 @@ class Forum_Subscription extends DataObject {
 					$email->populateTemplate($member);
 					$email->populateTemplate($post);
 					$email->populateTemplate(array(
-						'UnsubscribeLink' => $post->Thread()->Forum()->Link() . '/forumUnsubscribe/?BackURL=' . $post->Thread()->Forum()->Link()						
+						'UnsubscribeLink' => $post->Thread()->Forum()->Link() . 'forumunsubscribe/' . $post->Thread()->Forum()->ID . '?BackURL=' . $post->Thread()->Forum()->Link()
 					));
 					$email->send();
 				}

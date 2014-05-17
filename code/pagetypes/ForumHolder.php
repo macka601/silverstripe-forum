@@ -488,6 +488,20 @@ class ForumHolder extends Page {
 	function getForumHolder() {
 		return $this;
 	}
+
+	/**
+	 * return the ForumHold email address or default to global site admin
+	 *
+	 * @return string email address to send subscriptions email s from.
+	 * @TODO unit test to ensure the correct email is returned.
+	 */
+	public function getForumEmailAddress(){
+		if($this->getField('ForumEmailAddress')){
+			return $this->getField('ForumEmailAddress');
+		} else {
+			return Config::inst()->get('Email', 'admin_email');
+		}
+	}
 }
 
 
